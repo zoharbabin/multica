@@ -344,6 +344,9 @@ func buildClaudeArgs(opts ExecOptions) []string {
 		"--strict-mcp-config",
 		"--permission-mode", "bypassPermissions",
 	}
+	if opts.MCPConfigPath != "" {
+		args = append(args, "--mcp-config", opts.MCPConfigPath)
+	}
 	if opts.Model != "" {
 		args = append(args, "--model", opts.Model)
 	}

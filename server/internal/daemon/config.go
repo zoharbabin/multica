@@ -81,8 +81,9 @@ func LoadConfig(overrides Overrides) (Config, error) {
 	claudePath := envOrDefault("MULTICA_CLAUDE_PATH", "claude")
 	if _, err := exec.LookPath(claudePath); err == nil {
 		agents["claude"] = AgentEntry{
-			Path:  claudePath,
-			Model: strings.TrimSpace(os.Getenv("MULTICA_CLAUDE_MODEL")),
+			Path:          claudePath,
+			Model:         strings.TrimSpace(os.Getenv("MULTICA_CLAUDE_MODEL")),
+			MCPConfigPath: strings.TrimSpace(os.Getenv("MULTICA_CLAUDE_MCP_CONFIG")),
 		}
 	}
 	codexPath := envOrDefault("MULTICA_CODEX_PATH", "codex")

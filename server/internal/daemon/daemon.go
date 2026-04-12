@@ -999,6 +999,7 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, taskLo
 		Model:           entry.Model,
 		Timeout:         d.cfg.AgentTimeout,
 		ResumeSessionID: task.PriorSessionID,
+		MCPConfigPath:   entry.MCPConfigPath,
 	}
 
 	result, tools, err := d.executeAndDrain(ctx, backend, prompt, execOpts, taskLog, task.ID)

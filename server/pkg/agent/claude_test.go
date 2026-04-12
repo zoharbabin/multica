@@ -217,6 +217,40 @@ func TestBuildClaudeArgsIncludesStrictMCPConfig(t *testing.T) {
 	}
 }
 
+func TestBuildClaudeArgsAppendsMCPConfigPath(t *testing.T) {
+	t.Parallel()
+
+	args := buildClaudeArgs(ExecOptions{MCPConfigPath: "/etc/multica/mcp.json"})
+
+	foundStrict := false
+	foundMCPConfig := false
+	for i, a := range args {
+		if a == "--strict-mcp-config" {
+			foundStrict = true
+		}
+		if a == "--mcp-config" && i+1 < len(args) && args[i+1] == "/etc/multica/mcp.json" {
+			foundMCPConfig = true
+		}
+	}
+	if !foundStrict {
+		t.Fatalf("expected --strict-mcp-config to be preserved, got %v", args)
+	}
+	if !foundMCPConfig {
+		t.Fatalf("expected --mcp-config /etc/multica/mcp.json, got %v", args)
+	}
+}
+
+func TestBuildClaudeArgsOmitsMCPConfigWhenEmpty(t *testing.T) {
+	t.Parallel()
+
+	args := buildClaudeArgs(ExecOptions{})
+	for _, a := range args {
+		if a == "--mcp-config" {
+			t.Fatalf("expected no --mcp-config flag when MCPConfigPath is empty, got %v", args)
+		}
+	}
+}
+
 func TestBuildClaudeInputEncodesUserMessage(t *testing.T) {
 	t.Parallel()
 
