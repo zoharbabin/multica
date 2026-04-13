@@ -1,18 +1,24 @@
-# Self-hosting Docker Compose — starts PostgreSQL, backend, and frontend.
+# Self-hosting Docker Compose — full stack with daemons.
+#
+# Core services: postgres, backend, frontend  (official Multica)
+# Daemon services: daemon-claude, daemon-openclaw  (agent runtimes)
+#
+# Only external route: host LiteLLM proxy via llm-gateway alias
 #
 # Usage:
-#   cp .env.example .env
-#   # Edit .env — change JWT_SECRET at minimum
+#   cp .env.example .env   # then edit .env
 #   docker compose -f docker-compose.selfhost.yml up -d
 #
-# Frontend: http://localhost:3000
-# Backend:  http://localhost:8080 (also used by CLI/daemon)
+# Frontend: http://localhost:${FRONTEND_PORT:-3000}
+# Backend:  http://localhost:${PORT:-8080}
 
 name: multica
 
 services:
   postgres:
     image: pgvector/pgvector:pg17
+    networks:
+      - internal
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-multica}
       POSTGRES_USER: ${POSTGRES_USER:-multica}
@@ -31,11 +37,15 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    networks:
+      - internal
     depends_on:
       postgres:
         condition: service_healthy
     ports:
       - "${PORT:-8080}:8080"
+    volumes:
+      - uploads:/app/uploads
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-multica}:${POSTGRES_PASSWORD:-multica}@postgres:5432/${POSTGRES_DB:-multica}?sslmode=disable
       PORT: "8080"
@@ -54,6 +64,8 @@ services:
       CLOUDFRONT_PRIVATE_KEY: ${CLOUDFRONT_PRIVATE_KEY:-}
       COOKIE_DOMAIN: ${COOKIE_DOMAIN:-}
       MULTICA_APP_URL: ${MULTICA_APP_URL:-http://localhost:3000}
+      LOCAL_STORAGE_PATH: /app/uploads
+      LOCAL_STORAGE_URL: http://localhost:${PORT:-8080}/api/files
 
   frontend:
     build:
@@ -63,6 +75,8 @@ services:
         REMOTE_API_URL: http://backend:8080
         NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_CLIENT_ID:-}
         NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-}
+    networks:
+      - internal
     depends_on:
       - backend
     ports:
@@ -70,5 +84,65 @@ services:
     environment:
       HOSTNAME: "0.0.0.0"
 
+  # ── Agent daemon: Claude Code ──
+  daemon-claude:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.daemon-claude
+    networks:
+      - internal
+    extra_hosts:
+      - "llm-gateway:host-gateway"
+    depends_on:
+      - backend
+    volumes:
+      # Kaltura RevDB files (read-only, ~25GB)
+      - "${KALTURA_REVDB_PATH:-/dev/null}:/data/revdb:ro"
+      # Kaltura reference Excels (read-only)
+      - "${KALTURA_EXCELS_PATH:-/dev/null}:/data/excels:ro"
+    environment:
+      MULTICA_TOKEN: ${MULTICA_TOKEN}
+      MULTICA_SERVER_URL: http://backend:8080
+      MULTICA_APP_URL: http://frontend:3000
+      MULTICA_WORKSPACE_ID: ${MULTICA_WORKSPACE_ID}
+      MULTICA_WORKSPACE_NAME: ${MULTICA_WORKSPACE_NAME:-default}
+      MULTICA_DAEMON_ID: daemon-claude
+      ANTHROPIC_BASE_URL: http://host.docker.internal:10007
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      MULTICA_CLAUDE_MODEL: ${MULTICA_CLAUDE_MODEL:-}
+      # Salesforce SFDX auth URL (exported from host with: sf org display --verbose)
+      SF_SFDX_AUTH_URL: ${SF_SFDX_AUTH_URL:-}
+      # Optional: JSON blob of MCP servers config (written to file at startup)
+      MULTICA_MCP_SERVERS_JSON: ${MULTICA_MCP_SERVERS_JSON:-}
+    restart: unless-stopped
+
+  # ── Agent daemon: OpenClaw ──
+  daemon-openclaw:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.daemon
+    networks:
+      - internal
+    extra_hosts:
+      - "llm-gateway:host-gateway"
+    depends_on:
+      - backend
+    environment:
+      MULTICA_TOKEN: ${MULTICA_TOKEN}
+      MULTICA_SERVER_URL: http://backend:8080
+      MULTICA_APP_URL: http://frontend:3000
+      MULTICA_WORKSPACE_ID: ${MULTICA_WORKSPACE_ID}
+      MULTICA_WORKSPACE_NAME: ${MULTICA_WORKSPACE_NAME:-default}
+      MULTICA_DAEMON_ID: daemon-openclaw
+      OPENAI_BASE_URL: http://host.docker.internal:10007/v1
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      MULTICA_OPENCLAW_MODEL: ${MULTICA_OPENCLAW_MODEL:-}
+    restart: unless-stopped
+
+networks:
+  internal:
+    driver: bridge
+
 volumes:
   pgdata:
+  uploads:
